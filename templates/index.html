@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avail Validator Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/0xrishitripathi/avail-anywhere/main/avail_logo.svg">
+    <script>
+        function toggleDetails(id) {
+            var element = document.getElementById(id);
+            if (element.style.display === "none") {
+                element.style.display = "table-row";
+            } else {
+                element.style.display = "none";
+            }
+        }
+
+        function filterTable() {
+            var input = document.getElementById("validatorFilter").value.toLowerCase();
+            var table = document.getElementById("validatorTable");
+            var tr = table.getElementsByTagName("tr");
+
+            for (var i = 1; i < tr.length; i += 2) {
+                var td = tr[i].getElementsByTagName("td")[0];
+                if (td) {
+                    var txtValue = td.textContent || td.innerText;
+                    if (txtValue.toLowerCase().indexOf(input) > -1) {
+                        tr[i].style.display = "";
+                        if (tr[i + 1]) tr[i + 1].style.display = "none";
+                    } else {
+                        tr[i].style.display = "none";
+                        if (tr[i + 1]) tr[i + 1].style.display = "none";
+                    }
+                }
+            }
+        }
+
+        function toggleFilter() {
+            var header = document.getElementById("validatorHeader");
+            var filter = document.getElementById("validatorFilter");
+            var icon = document.getElementById("filterIcon");
+
+            if (filter.style.display === "none") {
+                header.style.display = "none";
+                filter.style.display = "inline-block";
+                icon.classList.remove("fa-filter");
+                icon.classList.add("fa-times");
+            } else {
+                header.style.display = "inline-block";
+                filter.style.display = "none";
+                icon.classList.remove("fa-times");
+                icon.classList.add("fa-filter");
+            }
+        }
+
+        document.addEventListener("click", function(event) {
+            var validatorColumn = document.getElementById("validatorColumn");
+            var header = document.getElementById("validatorHeader");
+            var filter = document.getElementById("validatorFilter");
+            var icon = document.getElementById("filterIcon");
+
+            if (!validatorColumn.contains(event.target)) {
+                header.style.display = "inline-block";
+                filter.style.display = "none";
+                icon.classList.remove("fa-times");
+                icon.classList.add("fa-filter");
+            }
+        });
+    </script>
+    <style>
+        .details-content {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;  
+        }
+        .details-item {
+            display: flex;
+            justify-content: space-between;
+        }
+        .logo-container {
+            width: 100%;
+            max-width: 300px;
+            margin: 20px auto 10px; 
+        }
+        .logo-container img {
+            width: 100%;
+            height: auto;
+        }
+        h1 {
+            margin-top: 0; 
+            margin-bottom: 30px; 
+        }
+        .era-info {
+            margin-top: 20px; 
+        }
+        .summary-item {
+            margin-bottom: 20px; 
+        }
+        .era-selector {
+            margin-top: 20px; 
+        }
+    </style>
+</head>
+<body>
+    <div class="logo-container">
+        <img src="https://raw.githubusercontent.com/0xrishitripathi/avail-anywhere/main/avail_logo.png" alt="Avail Logo">
+    </div>
+    <h1>Validator Dashboard</h1>
+    <div class="era-info">
+        <h2 class="summary-item">Era: {{ summary.selected_era }}</h2>
+        <h4 class="summary-item">Total Validators: {{ summary.total_validators }}</h4>
+        <h4 class="summary-item">Total Blocks Produced: {{ summary.total_blocks }}</h4>
+        <h4 class="summary-item">Total Stake: {{ summary.total_stake }} AVAIL</h4>
+    </div>
+    <div class="era-selector">
+        <form method="post">
+            <label for="era">Select Era:</label>
+            <select name="era" id="era">
+                {% for era in eras %}
+                    <option value="{{ era }}" {% if era == summary.selected_era %}selected{% endif %}>{{ era }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+
+    <div style="overflow-x:auto;">
+        <table id="validatorTable">
+            <thead>
+                <tr>
+                    <th id="validatorColumn">
+                        <span id="validatorHeader">Validator</span>
+                        <i id="filterIcon" class="fas fa-filter" onclick="toggleFilter()"></i>
+                        <input type="text" id="validatorFilter" onkeyup="filterTable()" placeholder="Filter validators..." style="display: none;">
+                    </th>
+                    <th>Era Points</th>
+                    <th>Blocks Produced</th>
+                    <th>Total Stake</th>
+                    <th>Commission Rate</th>
+                    <th>Total Reward</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for validator in validators %}
+                    <tr>
+                        <td>
+                            <a href="javascript:void(0);" onclick="toggleDetails('details-{{ loop.index }}')">
+                                {% if validator['ValidatorName'] %}
+                                    {{ validator['ValidatorName'] }}
+                                {% else %}
+                                    {{ validator['Validator'][:23] }}...
+                                {% endif %}
+                            </a>
+                        </td>
+                        <td>{{ validator['EraPoints'] }}</td>
+                        <td>{{ validator['BlocksProduced'] }}</td>
+                        <td>{{ validator['TotalStake'] }}</td>
+                        <td>{{ validator['CommissionRate'] }}</td>
+                        <td>{{ validator['TotalReward'] }}</td>
+                    </tr>
+                    <tr id="details-{{ loop.index }}" style="display:none;">
+                        <td colspan="6">
+                            <div class="details-content">
+                                <div class="details-item"><strong>Stash:</strong> <span>{{ validator['Validator'] }}</span></div>
+                                <div class="details-item"><strong>Nomination Count:</strong> <span>{{ validator['NomCount'] }}</span></div>
+                                <div class="details-item"><strong>Own Stake:</strong> <span>{{ validator['OwnStake'] }}</span></div>
+                                <div class="details-item"><strong>Nominated Stake:</strong> <span>{{ validator['NominatedStake'] }}</span></div>
+                                <div class="details-item"><strong>Total Rewards:</strong> <span>{{ validator['TotalReward'] }}</span></div>
+                                <div class="details-item"><strong>Commission Earned:</strong> <span>{{ validator['CommissionEarned'] }}</span></div>
+                                <div class="details-item"><strong>Validator Reward:</strong> <span>{{ validator['OwnReward'] }}</span></div>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
