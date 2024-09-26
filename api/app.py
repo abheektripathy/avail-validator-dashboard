@@ -166,11 +166,11 @@ def index():
         reported_current_era = getCurrentEra(substrate)
         logger.info(f"Reported current era: {reported_current_era}")
 
-            try:
+        try:
             df = processData(substrate, reported_current_era)
             current_era = reported_current_era
-            except Exception as e:
-            logger.warning(f"Data not available for reported era {reported_current_era}. Using previous era.")
+        except Exception as e:
+            logger.warning(f"Data not available for reported era {reported_current_era}. Using previous era. Error: {str(e)}")
             current_era = reported_current_era - 1
             df = processData(substrate, current_era)
         
