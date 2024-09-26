@@ -163,14 +163,25 @@ def index():
     try:
         substrate = createInstance()
         logger.info("Substrate instance created")
-        current_era = getCurrentEra(substrate)
-        logger.info(f"Current era: {current_era}")
+        reported_current_era = getCurrentEra(substrate)
+        logger.info(f"Reported current era: {reported_current_era}")
+
+            try:
+            df = processData(substrate, reported_current_era)
+            current_era = reported_current_era
+            except Exception as e:
+            logger.warning(f"Data not available for reported era {reported_current_era}. Using previous era.")
+            current_era = reported_current_era - 1
+            df = processData(substrate, current_era)
+        
+        logger.info(f"Using era: {current_era}")
         
         selected_era = request.form.get('era', current_era)
         selected_era = int(selected_era)
         logger.info(f"Selected era: {selected_era}")
-        
-        df = processData(substrate, selected_era)
+
+        if selected_era != current_era:
+            df = processData(substrate, selected_era)
         logger.info("Data processed successfully")
         
         total_validators = len(df)
@@ -192,8 +203,7 @@ def index():
         logger.info("Rendering template")
         return render_template('index.html', summary=summary, validators=validators_data, eras=eras)
     except Exception as e:
-        logger.error(f"An error occurred: {str(e)}")
-        logger.error(traceback.format_exc())
+        logger.error(f"An error occurred: {str(e)}", exc_info=True)
         return f"An error occurred: {str(e)}", 500
 
 if __name__ == '__main__':
