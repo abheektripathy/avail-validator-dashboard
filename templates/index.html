@@ -2,58 +2,256 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>Avail Validator Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/0xrishitripathi/avail-anywhere/main/avail_logo.svg">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         function toggleDetails(id) {
             var element = document.getElementById(id);
             if (element.style.display === "none") {
                 element.style.display = "table-row";
+                
+                // Get the validator stash from the data attribute
+                const validatorStash = element.getAttribute('data-validator-stash');
+                const currentEra = parseInt(document.getElementById('era').value);
+                
+                // Show loading state in the chart container immediately
+                const chartContainerId = `blockChart-${id.split('-')[1]}-container`;
+                const canvasId = `blockChart-${id.split('-')[1]}`;
+                
+                showLoading(chartContainerId);
+                
+                // Fetch block history immediately
+                fetchBlockHistory(validatorStash, currentEra, id, chartContainerId, canvasId);
             } else {
                 element.style.display = "none";
             }
         }
 
-        function filterTable() {
-            var input = document.getElementById("validatorFilter").value.toLowerCase();
-            var table = document.getElementById("validatorTable");
-            var tr = table.getElementsByTagName("tr");
+        async function fetchBlockHistory(validatorStash, currentEra, id, chartContainerId, canvasId) {
+            try {
+                console.log('Fetching history for validator:', validatorStash); // Debug log
+                const response = await fetch(`/validator_history/${validatorStash}/${currentEra}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const blockHistory = await response.json();
+                console.log('Received block history:', blockHistory); // Debug log
 
-            for (var i = 1; i < tr.length; i += 2) {
-                var td = tr[i].getElementsByTagName("td")[0];
-                if (td) {
-                    var txtValue = td.textContent || td.innerText;
-                    if (txtValue.toLowerCase().indexOf(input) > -1) {
-                        tr[i].style.display = "";
-                        if (tr[i + 1]) tr[i + 1].style.display = "none";
-                    } else {
-                        tr[i].style.display = "none";
-                        if (tr[i + 1]) tr[i + 1].style.display = "none";
+                // Hide loading container and show canvas
+                const container = document.getElementById(chartContainerId);
+                const canvas = document.getElementById(canvasId);
+                
+                if (blockHistory && blockHistory.eras && blockHistory.eras.length > 0) {
+                    container.style.display = 'none';
+                    canvas.style.display = 'block';
+                    initializeBlockChart(id.split('-')[1], blockHistory);
+                } else {
+                    container.innerHTML = '<p style="color: #ffffff; text-align: center;">No block production history available</p>';
+                }
+            } catch (error) {
+                console.error('Error fetching validator history:', error);
+                document.getElementById(chartContainerId).innerHTML = 
+                    '<p style="color: #ffffff; text-align: center;">Error loading block history</p>';
+            }
+        }
+
+        function filterTable() {
+            const input = document.getElementById('validatorFilter');
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById('validatorTable');
+            const tbody = table.getElementsByTagName('tbody')[0];
+            const rows = tbody.getElementsByTagName('tr');
+
+            // Process rows in pairs (main row + detail row)
+            for (let i = 0; i < rows.length; i += 2) {
+                const mainRow = rows[i];
+                const detailRow = rows[i + 1];
+                
+                if (mainRow) {
+                    // Get the validator name from the main row
+                    const validatorCell = mainRow.cells[0];
+                    const validatorLink = validatorCell.querySelector('a');
+                    const validatorName = validatorLink ? validatorLink.textContent.trim() : '';
+
+                    // Get the stash address from the detail row
+                    const stashAddress = detailRow.querySelector('.details-item span')?.textContent.trim() || '';
+
+                    // Check if either the name or address matches the filter
+                    const matchesFilter = filter === '' || 
+                        validatorName.toLowerCase().includes(filter) ||
+                        stashAddress.toLowerCase().includes(filter);
+
+                    // Show/hide the rows based on match
+                    mainRow.style.display = matchesFilter ? '' : 'none';
+                    if (detailRow) {
+                        // Keep detail row hidden unless it was already expanded
+                        detailRow.style.display = matchesFilter ? 
+                            (detailRow.style.display === 'table-row' ? 'table-row' : 'none') : 
+                            'none';
                     }
                 }
             }
         }
 
         function toggleFilter() {
-            var header = document.getElementById("validatorHeader");
-            var filter = document.getElementById("validatorFilter");
-            var icon = document.getElementById("filterIcon");
-
-            if (filter.style.display === "none") {
-                header.style.display = "none";
-                filter.style.display = "inline-block";
-                icon.classList.remove("fa-filter");
-                icon.classList.add("fa-times");
+            const filterInput = document.getElementById('validatorFilter');
+            const filterIcon = document.getElementById('filterIcon');
+            
+            if (filterInput.style.display === 'none') {
+                filterInput.style.display = 'inline-block';
+                filterIcon.className = 'fas fa-times';
+                filterInput.focus();
             } else {
-                header.style.display = "inline-block";
-                filter.style.display = "none";
-                icon.classList.remove("fa-times");
-                icon.classList.add("fa-filter");
+                filterInput.style.display = 'none';
+                filterIcon.className = 'fas fa-filter';
+                filterInput.value = '';
+                filterTable(); // Clear any existing filters
             }
+        }
+
+        function initializeBlockChart(validatorId, blockData) {
+            console.log('Initializing chart for validator:', validatorId); // Debug log
+            const ctx = document.getElementById(`blockChart-${validatorId}`).getContext('2d');
+            
+            if (blockData.eras && blockData.eras.length > 0) {
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: blockData.eras.map(era => `Era ${era}`),
+                        datasets: [{
+                            label: 'Blocks Produced',
+                            data: blockData.blocks,
+                            backgroundColor: 'rgba(255, 192, 203, 0.7)',
+                            borderColor: 'rgba(255, 192, 203, 1)',
+                            borderWidth: 1,
+                            borderRadius: 2,
+                            barThickness: 12,
+                            maxBarThickness: 12,
+                            categoryPercentage: 0.9,
+                            barPercentage: 0.95
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'x',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `Blocks: ${context.raw}`;
+                                    }
+                                }
+                            },
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.1)',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    color: '#ffffff',
+                                    font: {
+                                        size: 10
+                                    },
+                                    padding: 5,
+                                    maxTicksLimit: 6
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    color: '#ffffff',
+                                    maxRotation: 45,
+                                    minRotation: 45,
+                                    font: {
+                                        size: 8
+                                    },
+                                    padding: 0,
+                                    autoSkip: false,
+                                    callback: function(val, index) {
+                                        return this.getLabelForValue(val);
+                                    }
+                                }
+                            }
+                        },
+                        layout: {
+                            padding: {
+                                left: 5,
+                                right: 5,
+                                top: 10,
+                                bottom: 25
+                            }
+                        }
+                    }
+                });
+            } else {
+                ctx.canvas.style.display = 'none';
+                const noDataMsg = document.createElement('p');
+                noDataMsg.textContent = 'No block production history available';
+                noDataMsg.style.color = '#ffffff';
+                noDataMsg.style.textAlign = 'center';
+                ctx.canvas.parentNode.appendChild(noDataMsg);
+            }
+        }
+
+        function toggleEraSelect(select, event) {
+            event.stopPropagation();
+            if (select.size === 1) {
+                select.size = 5;
+                centerSelectedOption(select);
+            }
+        }
+
+        // Initialize the era selector behavior
+        document.addEventListener('DOMContentLoaded', function() {
+            const select = document.getElementById('era');
+            
+            // Ensure initial styling
+            select.size = 1;
+            
+            // Close on selection
+            select.addEventListener('change', function() {
+                this.size = 1;
+                this.blur();
+            });
+            
+            // Close when clicking an option
+            select.addEventListener('click', function(e) {
+                if (e.target.tagName === 'OPTION') {
+                    this.size = 1;
+                    this.blur();
+                }
+            });
+            
+            // Prevent default select behavior
+            select.addEventListener('mousedown', function(e) {
+                if (this.size === 1) {
+                    e.preventDefault();
+                    this.focus();
+                    toggleEraSelect(this, e);
+                }
+            });
+        });
+
+        function centerSelectedOption(select) {
+            const selectedIndex = select.selectedIndex;
+            const optionHeight = select.options[0].offsetHeight;
+            select.scrollTop = Math.max(0, (selectedIndex - 2) * optionHeight);
         }
 
         document.addEventListener("click", function(event) {
@@ -68,6 +266,102 @@
                 icon.classList.remove("fa-times");
                 icon.classList.add("fa-filter");
             }
+        });
+
+        let sortStates = {};
+
+        function sortTable(columnIndex, element) {
+            const table = document.getElementById('validatorTable');
+            const tbody = table.getElementsByTagName('tbody')[0];
+            const rows = Array.from(tbody.getElementsByTagName('tr')).filter((row, index) => index % 2 === 0);
+            const detailRows = Array.from(tbody.getElementsByTagName('tr')).filter((row, index) => index % 2 === 1);
+            
+            document.querySelectorAll('.sort-icon').forEach(icon => {
+                if (icon !== element) {
+                    icon.className = 'fas fa-sort fa-xs sort-icon';
+                    sortStates[icon.dataset.column] = 0;
+                }
+            });
+
+            if (!sortStates[columnIndex]) {
+                sortStates[columnIndex] = 1;
+                element.className = 'fas fa-sort-up fa-xs sort-icon';
+            } else if (sortStates[columnIndex] === 1) {
+                sortStates[columnIndex] = -1;
+                element.className = 'fas fa-sort-down fa-xs sort-icon';
+            } else {
+                sortStates[columnIndex] = 1;
+                element.className = 'fas fa-sort-up fa-xs sort-icon';
+            }
+
+            const sortedRows = rows.sort((a, b) => {
+                let aValue = a.cells[columnIndex].textContent.trim();
+                let bValue = b.cells[columnIndex].textContent.trim();
+
+                if (!isNaN(aValue.replace(/[^0-9.-]/g, ''))) {
+                    aValue = parseFloat(aValue.replace(/[^0-9.-]/g, ''));
+                    bValue = parseFloat(bValue.replace(/[^0-9.-]/g, ''));
+                }
+
+                if (sortStates[columnIndex] === 1) {
+                    return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+                } else {
+                    return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+                }
+            });
+
+            while (tbody.firstChild) {
+                tbody.removeChild(tbody.firstChild);
+            }
+
+            sortedRows.forEach((row, index) => {
+                const originalIndex = rows.indexOf(row);
+                const detailRow = detailRows[originalIndex];
+                
+                tbody.appendChild(row);
+                tbody.appendChild(detailRow);
+            });
+        }
+
+        document.addEventListener('click', function(event) {
+            const select = document.getElementById('era');
+            const targetElement = event.target;
+            
+            // Check if click is outside the select element
+            if (select && select.size > 1 && !select.contains(targetElement)) {
+                select.size = 1;
+                select.blur();
+            }
+        });
+
+        // Add this function to show loading state
+        function showLoading(containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `
+                <div class="loading-container">
+                    <div class="loading-animation"></div>
+                </div>
+            `;
+            container.style.display = 'block';
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Enable touch scrolling on mobile
+            const tableContainer = document.querySelector('.table-container');
+            let touchStartX = 0;
+            let scrollLeft = 0;
+
+            tableContainer.addEventListener('touchstart', function(e) {
+                touchStartX = e.touches[0].pageX - tableContainer.offsetLeft;
+                scrollLeft = tableContainer.scrollLeft;
+            });
+
+            tableContainer.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+                const x = e.touches[0].pageX - tableContainer.offsetLeft;
+                const walk = (x - touchStartX) * 2;
+                tableContainer.scrollLeft = scrollLeft - walk;
+            });
         });
     </script>
     <style>
@@ -102,6 +396,64 @@
         .era-selector {
             margin-top: 20px; 
         }
+        .block-production-graph {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .block-production-graph h4 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .loading-animation {
+            width: 32px;
+            height: 32px;
+            border: 4px solid #ffffff;
+            border-top: 4px solid transparent;
+            border-radius: 4px;
+            animation: spin 1s steps(8) infinite;
+            margin: 0;
+            position: relative;
+            top: 40px;
+            left: -60px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-container {
+            text-align: center;
+            padding: 20px;
+            height: 160px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            margin-top: 20px;    /* Adjust this to move down */
+            margin-right: 120px; /* Adjust this to move left */
+            /* Alternative positioning method:
+            position: relative;
+            left: -120px;  Negative value moves left
+            top: 40px;     Positive value moves down
+            */
+        }
+
+        tr[id^="details-"] {
+            transition: all 0.2s ease-out;
+        }
+
+        .block-chart-canvas {
+            display: none;
+        }
+
+        .era-selector button[type="submit"] {
+            padding: 5px 14px;
+            font-size: 11px;
+            height: 25px;
+            min-width: 72px;
+        }
     </style>
 </head>
 <body>
@@ -110,24 +462,32 @@
     </div>
     <h1>Validator Dashboard</h1>
     <div class="era-info">
-        <h2 class="summary-item">Era: {{ summary.selected_era }}</h2>
-        <h4 class="summary-item">Total Validators: {{ summary.total_validators }}</h4>
-        <h4 class="summary-item">Total Blocks Produced: {{ summary.total_blocks }}</h4>
-        <h4 class="summary-item">Total Stake: {{ summary.total_stake }} AVAIL</h4>
+        <h2 class="summary-item">Era: <span style="color: #00ffff;">{{ summary.selected_era }}</span></h2>
+        <h4 class="summary-item">Total Validators: <span style="color: #00ffff;">{{ summary.total_validators }}</span></h4>
+        <h4 class="summary-item">Total Blocks Produced: <span style="color: #00ffff;">{{ summary.total_blocks }}</span></h4>
+        <h4 class="summary-item">Total Stake: <span style="color: #00ffff;">{{ summary.total_stake }}</span> AVAIL</h4>
+        <h4 class="summary-item">
+            <span style="margin-right: 30px;">APY: <span style="color: #00ffff;">{{ summary.apy }}</span></span>
+            <span style="margin-left: 10px;">Staking Ratio: <span style="color: #00ffff;">{{ summary.staking_ratio }}</span></span>
+        </h4>
     </div>
     <div class="era-selector">
         <form method="post">
             <label for="era">Select Era:</label>
-            <select name="era" id="era">
-                {% for era in eras %}
-                    <option value="{{ era }}" {% if era == summary.selected_era %}selected{% endif %}>{{ era }}</option>
-                {% endfor %}
-            </select>
+            <div class="select-wrapper">
+                <select name="era" id="era" 
+                        onclick="toggleEraSelect(this, event);"
+                        onfocus="this.size=1;">
+                    {% for era in range(summary.current_era, -1, -1) %}
+                        <option value="{{ era }}" {% if era == summary.selected_era %}selected{% endif %}>{{ era }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <button type="submit">Submit</button>
         </form>
     </div>
 
-    <div style="overflow-x:auto;">
+    <div class="table-container">
         <table id="validatorTable">
             <thead>
                 <tr>
@@ -136,11 +496,26 @@
                         <i id="filterIcon" class="fas fa-filter" onclick="toggleFilter()"></i>
                         <input type="text" id="validatorFilter" onkeyup="filterTable()" placeholder="Filter validators..." style="display: none;">
                     </th>
-                    <th>Era Points</th>
-                    <th>Blocks Produced</th>
-                    <th>Total Stake</th>
-                    <th>Commission Rate</th>
-                    <th>Total Reward</th>
+                    <th>
+                        Era Points
+                        <i class="fas fa-sort fa-xs sort-icon" data-column="1" onclick="sortTable(1, this)"></i>
+                    </th>
+                    <th>
+                        Blocks Produced
+                        <i class="fas fa-sort fa-xs sort-icon" data-column="2" onclick="sortTable(2, this)"></i>
+                    </th>
+                    <th>
+                        Total Stake
+                        <i class="fas fa-sort fa-xs sort-icon" data-column="3" onclick="sortTable(3, this)"></i>
+                    </th>
+                    <th>
+                        Commission Rate
+                        <i class="fas fa-sort fa-xs sort-icon" data-column="4" onclick="sortTable(4, this)"></i>
+                    </th>
+                    <th>
+                        Total Reward
+                        <i class="fas fa-sort fa-xs sort-icon" data-column="5" onclick="sortTable(5, this)"></i>
+                    </th>
                 </tr>
             </thead>
             <tbody>
@@ -161,7 +536,7 @@
                         <td>{{ validator['CommissionRate'] }}</td>
                         <td>{{ validator['TotalReward'] }}</td>
                     </tr>
-                    <tr id="details-{{ loop.index }}" style="display:none;">
+                    <tr id="details-{{ loop.index }}" style="display:none;" data-validator-stash="{{ validator['ValidatorStash'] }}">
                         <td colspan="6">
                             <div class="details-content">
                                 <div class="details-item"><strong>Stash:</strong> <span>{{ validator['Validator'] }}</span></div>
@@ -170,7 +545,27 @@
                                 <div class="details-item"><strong>Nominated Stake:</strong> <span>{{ validator['NominatedStake'] }}</span></div>
                                 <div class="details-item"><strong>Total Rewards:</strong> <span>{{ validator['TotalReward'] }}</span></div>
                                 <div class="details-item"><strong>Commission Earned:</strong> <span>{{ validator['CommissionEarned'] }}</span></div>
-                                <div class="details-item"><strong>Validator Reward:</strong> <span>{{ validator['OwnReward'] }}</span></div>
+                                <div class="details-item">
+                                    <strong>Validator Reward:</strong> <span>{{ validator['OwnReward'] }}</span>
+                                </div>
+                                <div class="block-production-graph">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div style="width: 65%;">
+                                            <h4>Block Production History</h4>
+                                            <div style="height: 200px; margin-top: 20px; position: relative;">
+                                                <div id="blockChart-{{ loop.index }}-container"></div>
+                                                <canvas id="blockChart-{{ loop.index }}" class="block-chart-canvas"></canvas>
+                                            </div>
+                                        </div>
+                                        <div style="width: 35%; text-align: center; padding: 20px;">
+                                            <a href="https://explorer.avail.so/?rpc=wss%3A%2F%2Fmainnet-rpc.avail.so%2Fws&light=https%3A%2F%2Fapi.lightclient.mainnet.avail.so%2Fv1#/staking/query/{{ validator['ValidatorStash'] }}" 
+                                               target="_blank" 
+                                               style="color: #00ffff; text-decoration: none; font-weight: bold; cursor: pointer;">
+                                                Check: Validator Stats ↗
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </td>
                     </tr>
