@@ -454,6 +454,25 @@
             height: 25px;
             min-width: 72px;
         }
+        .mobile-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .mobile-metrics {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .metric {
+            margin-bottom: 10px;
+        }
+        .spacer {
+            margin: 0 10px;
+        }
+        .table-wrapper {
+            overflow-x: auto;
+        }
     </style>
 </head>
 <body>
@@ -466,9 +485,9 @@
         <h4 class="summary-item">Total Validators: <span style="color: #00ffff;">{{ summary.total_validators }}</span></h4>
         <h4 class="summary-item">Total Blocks Produced: <span style="color: #00ffff;">{{ summary.total_blocks }}</span></h4>
         <h4 class="summary-item">Total Stake: <span style="color: #00ffff;">{{ summary.total_stake }}</span> AVAIL</h4>
-        <h4 class="summary-item">
-            <span style="margin-right: 30px;">APY: <span style="color: #00ffff;">{{ summary.apy }}</span></span>
-            <span style="margin-left: 10px;">Staking Ratio: <span style="color: #00ffff;">{{ summary.staking_ratio }}</span></span>
+        <h4 class="summary-item metrics">
+            <div class="metric-item">APY: <span style="color: #00ffff;">{{ summary.apy }}</span></div>
+            <div class="metric-item">Staking Ratio: <span style="color: #00ffff;">{{ summary.staking_ratio }}</span></div>
         </h4>
     </div>
     <div class="era-selector">
@@ -487,7 +506,7 @@
         </form>
     </div>
 
-    <div class="table-container">
+    <div class="table-wrapper">
         <table id="validatorTable">
             <thead>
                 <tr>
