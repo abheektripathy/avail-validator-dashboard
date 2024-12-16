@@ -266,6 +266,9 @@ button[type="submit"] {
 .table-wrapper {
     width: 100%;
     overflow-x: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     -webkit-overflow-scrolling: touch;
 }
 
